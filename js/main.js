@@ -86,52 +86,70 @@ async function loadAttendance() {
   }
 }
 // 渲染打卡记录，可传入 nameFilter（'' 为不筛选）
-function renderLog(nameFilter = '') {
+async function renderLog(filter = '') {
   logBody.innerHTML = '';
-  loadAttendance().then((arr) => {
-    // ① 先过滤
-    const filtered = nameFilter
-      ? arr.filter((item) => item.name === nameFilter)
-      : arr;
-    // ② 按 time 从新到旧排序
-    filtered.sort((a, b) => new Date(b.time) - new Date(a.time));
-    // ③ 渲染
-    filtered.forEach((item) => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${item.name}</td><td>${new Date(
-        item.time
-      ).toLocaleString()}</td>`;
-      logBody.appendChild(tr);
-    });
-    logContainer.style.display = filtered.length ? 'block' : 'none';
-  });
+  const arr = await loadAttendance();
+  // ① 过滤
+  const data = filter ? arr.filter((i) => i.name === filter) : arr;
+  // ② 倒序
+  data.sort((a, b) => new Date(b.time) - new Date(a.time));
+  // ③ 渲染
+  for (const item of data) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${item.name}</td><td>${new Date(
+      item.time
+    ).toLocaleString()}</td>`;
+    logBody.appendChild(tr);
+  }
+  logContainer.style.display = data.length ? 'block' : 'none';
 }
 
 // —— 核心逻辑 ——
 
+// 录入：最多扫描 3 秒，检测到人脸后等待 3 秒再完成；超时后提示失败
 async function enrollFace() {
   const lab = username.value.trim();
   if (!lab) return showMsg('请输入姓名', true);
+
   clearInterval(enrollInterval);
+  showMsg('录入中…请正对摄像头');
   await startVideo();
-  showMsg('录入中...');
+
+  const startTime = Date.now();
+  const timeoutMs = 3000; // 最大扫描 3 秒
+  const scanIntervalMs = 200; // 每 200ms 扫描一次
+
   enrollInterval = setInterval(async () => {
+    const elapsed = Date.now() - startTime;
+    // 超过 3 秒还没检测到
+    if (elapsed >= timeoutMs) {
+      clearInterval(enrollInterval);
+      stopVideo();
+      return showMsg('录入失败：未检测到人脸', true);
+    }
+    // 尝试检测
     const det = await faceapi
       .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
       .withFaceLandmarks()
       .withFaceDescriptor();
+
     if (det) {
+      // 检测到 descriptor，先停扫描
       clearInterval(enrollInterval);
-      stopVideo();
-      rawDesc[lab] = rawDesc[lab] || [];
-      rawDesc[lab].push(Array.from(det.descriptor));
-      saveDescriptors();
-      rebuildMatcher();
-      showMsg(`录入成功：${lab}`);
+      // 延迟 3 秒再写入
+      setTimeout(() => {
+        rawDesc[lab] = rawDesc[lab] || [];
+        rawDesc[lab].push(Array.from(det.descriptor));
+        saveDescriptors();
+        rebuildMatcher();
+        stopVideo();
+        showMsg(`录入成功：${lab}`);
+      }, 3000);
     }
-  }, 500);
+  }, scanIntervalMs);
 }
 
+// 识别：成功后再等 3 秒提示，5 秒内才算有效；超时 5 秒后提示失败
 async function startRecognition() {
   if (!faceMatcher) {
     return showMsg('请先录入人脸', true);
@@ -147,51 +165,60 @@ async function startRecognition() {
   showMsg('打卡中…请正对摄像头');
   await startVideo();
 
+  const startTime = Date.now();
+  const failureTimeoutMs = 5000; // 5 秒后算失败
+  const scanIntervalMs = 200; // 每 200ms 扫描一次
+
   recognizeInterval = setInterval(async () => {
+    const elapsed = Date.now() - startTime;
+
+    // 检测人脸描述
     const results = await faceapi
       .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
       .withFaceLandmarks()
       .withFaceDescriptors();
 
-    // 同步 Canvas 大小
+    // 同步画布
     const size = { width: video.videoWidth, height: video.videoHeight };
     faceapi.matchDimensions(canvas, size);
     const resized = faceapi.resizeResults(results, size);
-
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    if (resized.length === 0) {
-      // 如果一帧都没检测到人脸，就继续等下一帧
-      return;
+    if (resized.length > 0) {
+      const best = faceMatcher.findBestMatch(resized[0].descriptor);
+      new faceapi.draw.DrawBox(resized[0].detection.box, {
+        label: best.toString(),
+      }).draw(canvas);
+
+      if (best.label !== 'unknown') {
+        // 成功匹配：先停扫描，再延迟 3 秒提示
+        clearInterval(recognizeInterval);
+        setTimeout(async () => {
+          stopVideo();
+          // 写入记录
+          const logArr = await loadAttendance();
+          logArr.push({ name: best.label, time: new Date().toISOString() });
+          await saveAttendanceToServer(logArr);
+          showMsg(
+            `打卡成功：${best.label} 时间 ${new Date().toLocaleTimeString()}`
+          );
+          isRecognizing = false;
+        }, 3000);
+        return;
+      }
     }
 
-    // 这里只取第一张脸来做示例
-    const descriptor = resized[0].descriptor;
-    const best = faceMatcher.findBestMatch(descriptor);
-    new faceapi.draw.DrawBox(resized[0].detection.box, {
-      label: best.toString(),
-    }).draw(canvas);
-
-    if (best.label === 'unknown') {
-      // 无匹配：停止打卡，提示失败
+    // 如果到 5 秒还没匹配成功，则失败
+    if (elapsed >= failureTimeoutMs) {
       clearInterval(recognizeInterval);
-      isRecognizing = false;
       stopVideo();
+      isRecognizing = false;
       return showMsg('识别失败：未匹配到已录入人脸', true);
     }
 
-    // 匹配成功：记录打卡并退出
-    clearInterval(recognizeInterval);
-    isRecognizing = false;
-    stopVideo();
-
-    const logArr = await loadAttendance();
-    logArr.push({ name: best.label, time: new Date().toISOString() });
-    await saveAttendanceToServer(logArr);
-
-    showMsg(`打卡成功：${best.label} 时间 ${new Date().toLocaleTimeString()}`);
-  }, 200);
+    // 否则继续下一次扫描
+  }, scanIntervalMs);
 }
 
 // —— 事件绑定 & 初始化 ——
@@ -227,7 +254,17 @@ tabs.forEach((t) => {
 // Buttons
 enrollBtn.addEventListener('click', enrollFace);
 recognizeBtn.addEventListener('click', startRecognition);
-openFilter.addEventListener('click', () => filterModal.classList.add('show'));
+openFilter.addEventListener('click', async () => {
+  const all = await loadAttendance();
+  const names = [...new Set(all.map((i) => i.name))];
+  filterSelect.innerHTML = '<option value="">全部</option>';
+  names.forEach((n) => {
+    const o = document.createElement('option');
+    o.value = o.textContent = n;
+    filterSelect.appendChild(o);
+  });
+  filterModal.classList.add('show');
+});
 filterCancel.addEventListener('click', () =>
   filterModal.classList.remove('show')
 );
@@ -254,7 +291,7 @@ exportCsvBtn.addEventListener('click', async () => {
   const all = await loadAttendance();
   const filter = filterSelect.value;
   let arr = filter ? all.filter((i) => i.name === filter) : all;
-  if (!arr.length) return showMessage('当前没有记录可导出', true);
+  if (!arr.length) return showMsg('当前没有记录可导出', true);
 
   // 倒序
   arr.sort((a, b) => new Date(b.time) - new Date(a.time));
@@ -282,7 +319,7 @@ exportJsonBtn.addEventListener('click', async () => {
   const all = await loadAttendance();
   const filter = filterSelect.value;
   let arr = filter ? all.filter((i) => i.name === filter) : all;
-  if (!arr.length) return showMessage('当前没有记录可导出', true);
+  if (!arr.length) return showMsg('当前没有记录可导出', true);
 
   // 倒序
   arr.sort((a, b) => new Date(b.time) - new Date(a.time));
@@ -300,9 +337,18 @@ exportJsonBtn.addEventListener('click', async () => {
   URL.revokeObjectURL(url);
 });
 
-document.getElementById('resetBtn').addEventListener('click', () => {
+document.getElementById('resetBtn').addEventListener('click', async () => {
   if (!confirm('确认要清空所有人脸和记录吗？')) return;
+  // 清本地人脸
   localStorage.removeItem('faceDescriptors');
-  localStorage.removeItem('attendanceLog');
-  showMsg('已清空本地数据，请刷新页面重新录入', false);
+  rebuildMatcher();
+
+  // 清服务器打卡记录
+  await saveAttendanceToServer([]);
+  showMsg('已清空所有人脸和打卡记录，请刷新页面重新录入', false);
+});
+
+video.addEventListener('play', () => {
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
 });

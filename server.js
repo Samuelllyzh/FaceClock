@@ -25,4 +25,16 @@ app.post('/api/saveAttendance', (req, res) => {
   });
 });
 
+app.get('/attendance.json', (req, res) => {
+  const file = path.join(__dirname, 'attendance.json');
+  fs.readFile(file, 'utf8', (err, data) => {
+    if (err) return res.json([]);
+    try {
+      res.json(JSON.parse(data));
+    } catch {
+      res.json([]);
+    }
+  });
+});
+
 app.listen(8000, () => console.log('Server running at http://localhost:8000'));
