@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Face Detection Demo</title>
+    <!-- 内联样式 -->
+    <style>
+      body {
+        margin: 0;
+        background: #333;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+      }
+      video,
+      canvas {
+        position: absolute;
+        width: 720px;
+        height: 560px;
+        border-radius: 4px;
+      }
+    </style>
+    <!-- 正确的 face-api.js UMD CDN -->
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"
+    ></script>
+    <!-- 主脚本 -->
+    <script defer src="js/main.js"></script>
+    <!-- 可选：添加 favicon 来避免 404 -->
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=" />
+  </head>
+  <body>
+    <video id="video" autoplay muted></video>
+    <canvas id="overlay"></canvas>
+  </body>
+</html>
