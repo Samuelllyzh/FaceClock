@@ -85,18 +85,25 @@ async function loadAttendance() {
     return [];
   }
 }
-function renderLog(filter = '') {
+// 渲染打卡记录，可传入 nameFilter（'' 为不筛选）
+function renderLog(nameFilter = '') {
   logBody.innerHTML = '';
   loadAttendance().then((arr) => {
-    const data = filter ? arr.filter((i) => i.name === filter) : arr;
-    data.forEach((i) => {
+    // ① 先过滤
+    const filtered = nameFilter
+      ? arr.filter((item) => item.name === nameFilter)
+      : arr;
+    // ② 按 time 从新到旧排序
+    filtered.sort((a, b) => new Date(b.time) - new Date(a.time));
+    // ③ 渲染
+    filtered.forEach((item) => {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${i.name}</td><td>${new Date(
-        i.time
+      tr.innerHTML = `<td>${item.name}</td><td>${new Date(
+        item.time
       ).toLocaleString()}</td>`;
       logBody.appendChild(tr);
     });
-    logContainer.style.display = data.length ? 'block' : 'none';
+    logContainer.style.display = filtered.length ? 'block' : 'none';
   });
 }
 
@@ -201,10 +208,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Tabs 切换
 tabs.forEach((t) => {
   t.addEventListener('click', () => {
+    // 1. 切换样式
     tabs.forEach((x) => x.classList.remove('active'));
     panes.forEach((p) => p.classList.remove('active'));
     t.classList.add('active');
     document.getElementById(t.dataset.tab).classList.add('active');
+
+    // 2. 如果是“打卡记录”页
+    if (t.dataset.tab === 'records') {
+      // 清空筛选条件
+      filterSelect.value = '';
+      // 刷新全部记录
+      renderLog();
+    }
   });
 });
 
@@ -216,22 +232,73 @@ filterCancel.addEventListener('click', () =>
   filterModal.classList.remove('show')
 );
 filterConfirm.addEventListener('click', () => {
-  renderLog(filterSelect.value);
+  const filter = filterSelect.value;
   filterModal.classList.remove('show');
-  document.querySelector('.tab[data-tab="records"]').click();
+
+  // 手动切换到“打卡记录”标签页（绕过 tabs.forEach 里的清空筛选逻辑）
+  tabs.forEach((t) => t.classList.remove('active'));
+  panes.forEach((p) => p.classList.remove('active'));
+  document.querySelector('.tab[data-tab="records"]').classList.add('active');
+  document.getElementById('records').classList.add('active');
+
+  // 渲染带筛选的最新记录
+  renderLog(filter);
 });
 showAllBtn.addEventListener('click', () => {
-  renderLog();
+  // 切换到“打卡记录”标签页。renderLog() 在标签的 click 监听里自动调用一次
+  filterSelect.value = ''; // 可选：清空筛选条件
   document.querySelector('.tab[data-tab="records"]').click();
 });
-exportCsvBtn.addEventListener(
-  'click',
-  () => renderLog() || alert('请先“查看全部”后再导出') || location.reload()
-);
-exportJsonBtn.addEventListener(
-  'click',
-  () => renderLog() || alert('请先“查看全部”后再导出') || location.reload()
-);
+// 导出 CSV
+exportCsvBtn.addEventListener('click', async () => {
+  const all = await loadAttendance();
+  const filter = filterSelect.value;
+  let arr = filter ? all.filter((i) => i.name === filter) : all;
+  if (!arr.length) return showMessage('当前没有记录可导出', true);
+
+  // 倒序
+  arr.sort((a, b) => new Date(b.time) - new Date(a.time));
+
+  // 构造 CSV 并加 BOM
+  const header = ['姓名', '时间'];
+  const rows = arr.map((i) =>
+    [`"${i.name}"`, `"${new Date(i.time).toLocaleString()}"`].join(',')
+  );
+  const csvContent = '\uFEFF' + [header.join(','), ...rows].join('\r\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `attendance_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+
+// 导出 JSON
+exportJsonBtn.addEventListener('click', async () => {
+  const all = await loadAttendance();
+  const filter = filterSelect.value;
+  let arr = filter ? all.filter((i) => i.name === filter) : all;
+  if (!arr.length) return showMessage('当前没有记录可导出', true);
+
+  // 倒序
+  arr.sort((a, b) => new Date(b.time) - new Date(a.time));
+
+  const blob = new Blob([JSON.stringify(arr, null, 2)], {
+    type: 'application/json',
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `attendance_${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
 
 document.getElementById('resetBtn').addEventListener('click', () => {
   if (!confirm('确认要清空所有人脸和记录吗？')) return;
