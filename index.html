@@ -1,98 +1,188 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FaceClock 考勤打卡</title>
-    <!-- 内联样式 -->
+    <!-- 内联样式：响应式 & 毛玻璃 UI -->
     <style>
-      body {
+      :root {
+        --primary: #4e54c8;
+        --secondary: #8f94fb;
+        --accent: #ff6a61;
+      }
+      * {
         margin: 0;
-        background: #333;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
+        color: #e0e0e0;
+        height: 100vh;
+        overflow: hidden;
         display: flex;
         justify-content: center;
         align-items: center;
-        height: 100vh;
       }
-      video,
-      canvas {
+      /* 视频容器 */
+      .video-wrapper {
+        position: relative;
+        width: 80vw;
+        max-width: 720px;
+        aspect-ratio: 9/7; /* 720×560 */
+        margin-bottom: 2rem;
+      }
+      .video-wrapper video,
+      .video-wrapper canvas {
         position: absolute;
-        width: 720px;
-        height: 560px;
-        border-radius: 4px;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+      }
+      /* 控件面板 */
+      #controls {
+        position: absolute;
+        bottom: 2rem;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        background: rgba(30, 30, 47, 0.75);
+        backdrop-filter: blur(8px);
+        padding: 12px 16px;
+        border-radius: 12px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        z-index: 10;
+      }
+      #controls input {
+        background: rgba(255, 255, 255, 0.1);
+        border: none;
+        border-radius: 8px;
+        padding: 8px 12px;
+        color: #e0e0e0;
+        width: 180px;
+        outline: none;
+        font-size: 0.95rem;
+      }
+      #controls button {
+        background: linear-gradient(45deg, var(--accent), var(--primary));
+        border: none;
+        border-radius: 8px;
+        padding: 8px 16px;
+        color: #fff;
+        font-weight: 500;
+        cursor: pointer;
+        transition: transform 0.2s, filter 0.3s;
+      }
+      #controls button:hover {
+        transform: translateY(-2px);
+        filter: brightness(1.1);
+      }
+      /* 提示信息 */
+      #message {
+        position: absolute;
+        top: 1rem;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(30, 30, 47, 0.75);
+        backdrop-filter: blur(8px);
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-weight: 500;
+        z-index: 10;
+        min-width: 200px;
+        text-align: center;
+      }
+      /* 打卡记录面板 */
+      #logContainer {
+        position: absolute;
+        top: 2rem;
+        right: 2rem;
+        width: 20rem;
+        max-height: 60vh;
+        overflow-y: auto;
+        background: rgba(30, 30, 47, 0.75);
+        backdrop-filter: blur(8px);
+        padding: 12px;
+        border-radius: 12px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        z-index: 10;
+        display: none;
+      }
+      #logTable {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      #logTable th,
+      #logTable td {
+        padding: 6px 8px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        font-size: 0.9rem;
+      }
+      #logTable th {
+        font-weight: 600;
+        text-transform: uppercase;
+      }
+      /* 小屏幕优化 */
+      @media (max-width: 768px) {
+        .video-wrapper {
+          width: 95vw;
+        }
+        #controls {
+          bottom: 1rem;
+          gap: 0.5rem;
+        }
+        #logContainer {
+          top: auto;
+          bottom: 1rem;
+          left: 50%;
+          right: auto;
+          transform: translateX(-50%);
+          width: 90vw;
+        }
       }
     </style>
-    <!-- Face API 库 -->
+
+    <!-- face-api.js -->
     <script
       defer
       src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"
     ></script>
-    <!-- 主脚本 -->
+    <!-- 业务脚本 -->
     <script defer src="js/main.js"></script>
     <!-- 避免 favicon 404 -->
     <link rel="icon" href="data:;base64,iVBORw0KGgo=" />
   </head>
+
   <body>
-    <!-- 摄像头与覆盖画布 -->
-    <video id="video" autoplay muted></video>
-    <canvas id="overlay"></canvas>
+    <!-- 响应式视频 & Canvas -->
+    <div class="video-wrapper">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="overlay"></canvas>
+    </div>
 
     <!-- 操作控件 -->
-    <div
-      id="controls"
-      style="
-        position: absolute;
-        top: 10px;
-        left: 10px;
-        z-index: 10;
-        color: #fff;
-        background: rgba(0, 0, 0, 0.5);
-        padding: 8px;
-        border-radius: 4px;
-      "
-    >
-      <input
-        type="text"
-        id="usernameInput"
-        placeholder="输入姓名"
-        style="
-          padding: 4px;
-          border-radius: 2px;
-          border: 1px solid #666;
-          margin-right: 4px;
-        "
-      />
+    <div id="controls">
+      <input type="text" id="usernameInput" placeholder="输入姓名" />
       <button id="enrollBtn">录入人脸</button>
       <button id="recognizeBtn">开始打卡</button>
       <button id="showLogBtn">查看打卡记录</button>
       <button id="exportCsvBtn">导出打卡记录</button>
-      <div id="message" style="margin-top: 8px; min-height: 18px"></div>
     </div>
 
+    <!-- 提示信息 -->
+    <div id="message">准备就绪</div>
+
     <!-- 打卡记录展示区 -->
-    <div
-      id="logContainer"
-      style="
-        position: absolute;
-        bottom: 10px;
-        left: 10px;
-        max-height: 200px;
-        overflow: auto;
-        background: #222;
-        color: #fff;
-        padding: 8px;
-        border-radius: 4px;
-        display: none;
-        z-index: 10;
-        width: 720px;
-      "
-    >
-      <table
-        id="logTable"
-        border="1"
-        style="width: 100%; border-collapse: collapse; text-align: left"
-      >
+    <div id="logContainer">
+      <table id="logTable" border="1">
         <thead>
           <tr>
             <th>姓名</th>
