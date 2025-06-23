@@ -1,0 +1,19 @@
+// server.js
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const app = express();
+
+app.use(express.json());
+app.use(express.static(path.join(__dirname))); // 静态托管 index.html, js/, models/, descriptors.json
+
+// 接收前端推送，自动写 descriptors.json
+app.post('/api/saveDescriptors', (req, res) => {
+  const file = path.join(__dirname, 'descriptors.json');
+  fs.writeFile(file, JSON.stringify(req.body, null, 2), (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ status: 'ok' });
+  });
+});
+
+app.listen(8000, () => console.log('Server running at http://localhost:8000'));

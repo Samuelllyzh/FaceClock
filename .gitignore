@@ -1,0 +1,4 @@
+# 忽略依赖目录
+node_modules/
+# 忽略 npm 调试日志
+npm-debug.log*

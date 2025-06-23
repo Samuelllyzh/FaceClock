@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Face Detection Demo</title>
+    <title>FaceClock 考勤打卡</title>
     <!-- 内联样式 -->
     <style>
       body {
@@ -23,18 +23,84 @@
         border-radius: 4px;
       }
     </style>
-    <!-- 正确的 face-api.js UMD CDN -->
+    <!-- Face API 库 -->
     <script
       defer
       src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"
     ></script>
     <!-- 主脚本 -->
     <script defer src="js/main.js"></script>
-    <!-- 可选：添加 favicon 来避免 404 -->
+    <!-- 避免 favicon 404 -->
     <link rel="icon" href="data:;base64,iVBORw0KGgo=" />
   </head>
   <body>
+    <!-- 摄像头与覆盖画布 -->
     <video id="video" autoplay muted></video>
     <canvas id="overlay"></canvas>
+
+    <!-- 操作控件 -->
+    <div
+      id="controls"
+      style="
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 10;
+        color: #fff;
+        background: rgba(0, 0, 0, 0.5);
+        padding: 8px;
+        border-radius: 4px;
+      "
+    >
+      <input
+        type="text"
+        id="usernameInput"
+        placeholder="输入姓名"
+        style="
+          padding: 4px;
+          border-radius: 2px;
+          border: 1px solid #666;
+          margin-right: 4px;
+        "
+      />
+      <button id="enrollBtn">录入人脸</button>
+      <button id="recognizeBtn">开始打卡</button>
+      <button id="showLogBtn">查看打卡记录</button>
+      <button id="exportCsvBtn">导出打卡记录</button>
+      <div id="message" style="margin-top: 8px; min-height: 18px"></div>
+    </div>
+
+    <!-- 打卡记录展示区 -->
+    <div
+      id="logContainer"
+      style="
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        max-height: 200px;
+        overflow: auto;
+        background: #222;
+        color: #fff;
+        padding: 8px;
+        border-radius: 4px;
+        display: none;
+        z-index: 10;
+        width: 720px;
+      "
+    >
+      <table
+        id="logTable"
+        border="1"
+        style="width: 100%; border-collapse: collapse; text-align: left"
+      >
+        <thead>
+          <tr>
+            <th>姓名</th>
+            <th>时间</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </body>
 </html>
