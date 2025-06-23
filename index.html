@@ -4,8 +4,9 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FaceClock 考勤打卡</title>
-    <!-- 内联样式：响应式 & 毛玻璃 UI -->
+    <title>FaceClock 考勤系统</title>
+
+    <!-- 内联样式：Tabs、Modal、UI 美化 -->
     <style>
       :root {
         --primary: #4e54c8;
@@ -18,22 +19,59 @@
         box-sizing: border-box;
       }
       body {
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-family: 'Segoe UI', sans-serif;
         background: linear-gradient(135deg, var(--primary), var(--secondary));
-        color: #e0e0e0;
+        color: #eee;
         height: 100vh;
         overflow: hidden;
+      }
+      /* Nav Tabs */
+      #nav {
         display: flex;
-        justify-content: center;
+        gap: 1rem;
+        background: rgba(30, 30, 47, 0.8);
+        padding: 0.75rem;
+        backdrop-filter: blur(6px);
+      }
+      #nav .tab {
+        flex: 1;
+        text-align: center;
+        padding: 0.5rem;
+        cursor: pointer;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.1);
+        transition: background 0.2s;
+      }
+      #nav .tab.active {
+        background: var(--accent);
+        color: #fff;
+      }
+      /* Content Panes */
+      #content {
+        position: relative;
+        height: calc(100vh - 3.5rem);
+      }
+      .pane {
+        display: none;
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+      }
+      .pane.active {
+        display: flex;
+        flex-direction: column;
         align-items: center;
       }
+
       /* 视频容器 */
       .video-wrapper {
         position: relative;
-        width: 80vw;
+        width: 60vw;
         max-width: 720px;
-        aspect-ratio: 9/7; /* 720×560 */
-        margin-bottom: 2rem;
+        aspect-ratio: 9/7;
+        margin-top: 1rem;
       }
       .video-wrapper video,
       .video-wrapper canvas {
@@ -45,75 +83,56 @@
         border-radius: 12px;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
       }
-      /* 控件面板 */
-      #controls {
-        position: absolute;
-        bottom: 2rem;
-        left: 50%;
-        transform: translateX(-50%);
+      /* 控件区 */
+      #controls,
+      #recordsControls {
         display: flex;
         flex-wrap: wrap;
         gap: 0.75rem;
-        background: rgba(30, 30, 47, 0.75);
-        backdrop-filter: blur(8px);
-        padding: 12px 16px;
-        border-radius: 12px;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-        z-index: 10;
+        margin: 1rem 0;
+        backdrop-filter: blur(6px);
+        background: rgba(30, 30, 47, 0.8);
+        padding: 0.75rem;
+        border-radius: 8px;
       }
-      #controls input {
+      #controls input,
+      #recordsControls select {
+        padding: 0.5rem;
+        border: none;
+        border-radius: 6px;
         background: rgba(255, 255, 255, 0.1);
-        border: none;
-        border-radius: 8px;
-        padding: 8px 12px;
-        color: #e0e0e0;
-        width: 180px;
-        outline: none;
-        font-size: 0.95rem;
+        color: #eee;
       }
-      #controls button {
+      #controls button,
+      #recordsControls button {
+        padding: 0.5rem 1rem;
+        border: none;
+        border-radius: 6px;
         background: linear-gradient(45deg, var(--accent), var(--primary));
-        border: none;
-        border-radius: 8px;
-        padding: 8px 16px;
         color: #fff;
-        font-weight: 500;
         cursor: pointer;
-        transition: transform 0.2s, filter 0.3s;
+        transition: filter 0.2s;
       }
-      #controls button:hover {
-        transform: translateY(-2px);
+      #controls button:hover,
+      #recordsControls button:hover {
         filter: brightness(1.1);
       }
-      /* 提示信息 */
+      /* 提示 */
       #message {
-        position: absolute;
-        top: 1rem;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(30, 30, 47, 0.75);
-        backdrop-filter: blur(8px);
-        padding: 8px 16px;
-        border-radius: 8px;
-        font-weight: 500;
-        z-index: 10;
-        min-width: 200px;
+        min-height: 1.2em;
+        margin-top: 0.5rem;
         text-align: center;
       }
-      /* 打卡记录面板 */
+      /* 记录区域 */
       #logContainer {
-        position: absolute;
-        top: 2rem;
-        right: 2rem;
-        width: 20rem;
-        max-height: 60vh;
-        overflow-y: auto;
-        background: rgba(30, 30, 47, 0.75);
-        backdrop-filter: blur(8px);
-        padding: 12px;
-        border-radius: 12px;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-        z-index: 10;
+        width: 60vw;
+        max-width: 720px;
+        flex: 1;
+        overflow: auto;
+        backdrop-filter: blur(6px);
+        background: rgba(30, 30, 47, 0.8);
+        padding: 1rem;
+        border-radius: 8px;
         display: none;
       }
       #logTable {
@@ -122,31 +141,52 @@
       }
       #logTable th,
       #logTable td {
-        padding: 6px 8px;
+        padding: 0.5rem;
         border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        font-size: 0.9rem;
       }
       #logTable th {
         font-weight: 600;
-        text-transform: uppercase;
       }
-      /* 小屏幕优化 */
-      @media (max-width: 768px) {
-        .video-wrapper {
-          width: 95vw;
-        }
-        #controls {
-          bottom: 1rem;
-          gap: 0.5rem;
-        }
-        #logContainer {
-          top: auto;
-          bottom: 1rem;
-          left: 50%;
-          right: auto;
-          transform: translateX(-50%);
-          width: 90vw;
-        }
+
+      /* Modal */
+      .modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 20;
+        visibility: hidden;
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+      .modal.show {
+        visibility: visible;
+        opacity: 1;
+      }
+      .modal-content {
+        background: #222;
+        padding: 1.5rem;
+        border-radius: 8px;
+        min-width: 280px;
+      }
+      .modal-content h3 {
+        margin-bottom: 1rem;
+        color: #fff;
+      }
+      .modal-actions {
+        text-align: right;
+        margin-top: 1rem;
+      }
+      .modal-actions button {
+        margin-left: 0.5rem;
+        padding: 0.4rem 0.8rem;
+        border: none;
+        border-radius: 4px;
+        background: var(--accent);
+        color: #fff;
+        cursor: pointer;
       }
     </style>
 
@@ -155,42 +195,68 @@
       defer
       src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"
     ></script>
-    <!-- 业务脚本 -->
+    <!-- 主逻辑 -->
     <script defer src="js/main.js"></script>
-    <!-- 避免 favicon 404 -->
-    <link rel="icon" href="data:;base64,iVBORw0KGgo=" />
   </head>
 
   <body>
-    <!-- 响应式视频 & Canvas -->
-    <div class="video-wrapper">
-      <video id="video" autoplay muted playsinline></video>
-      <canvas id="overlay"></canvas>
+    <!-- 顶部 Tabs -->
+    <div id="nav">
+      <div class="tab active" data-tab="punch">打卡</div>
+      <div class="tab" data-tab="records">打卡记录</div>
     </div>
 
-    <!-- 操作控件 -->
-    <div id="controls">
-      <input type="text" id="usernameInput" placeholder="输入姓名" />
-      <button id="enrollBtn">录入人脸</button>
-      <button id="recognizeBtn">开始打卡</button>
-      <button id="showLogBtn">查看打卡记录</button>
-      <button id="exportCsvBtn">导出打卡记录</button>
+    <!-- 主区域 -->
+    <div id="content">
+      <!-- Pane 1：录入 & 打卡 -->
+      <div id="punch" class="pane active">
+        <div class="video-wrapper">
+          <video id="video" autoplay muted playsinline></video
+          ><canvas id="overlay"></canvas>
+        </div>
+        <div id="controls">
+          <input id="usernameInput" placeholder="输入姓名" />
+          <button id="enrollBtn">录入人脸</button>
+          <button id="recognizeBtn">开始打卡</button>
+        </div>
+        <div id="message">准备就绪</div>
+      </div>
+
+      <!-- Pane 2：查看 & 导出记录 -->
+      <div id="records" class="pane">
+        <div id="recordsControls">
+          <button id="openFilter">筛选记录</button>
+          <button id="showAllBtn">查看全部</button>
+          <button id="exportCsvBtn">导出 CSV</button>
+          <button id="exportJsonBtn">导出 JSON</button>
+          <button id="resetBtn">清楚所有录入数据</button>
+        </div>
+        <div id="logContainer">
+          <table id="logTable">
+            <thead>
+              <tr>
+                <th>姓名</th>
+                <th>时间</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
-    <!-- 提示信息 -->
-    <div id="message">准备就绪</div>
-
-    <!-- 打卡记录展示区 -->
-    <div id="logContainer">
-      <table id="logTable" border="1">
-        <thead>
-          <tr>
-            <th>姓名</th>
-            <th>时间</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+    <!-- Filter Modal -->
+    <div id="filterModal" class="modal">
+      <div class="modal-content">
+        <h3>筛选打卡记录</h3>
+        <select id="filterSelect">
+          <option value="">全部</option>
+        </select>
+        <div class="modal-actions">
+          <button id="filterCancel">取消</button>
+          <button id="filterConfirm">确定</button>
+        </div>
+      </div>
     </div>
   </body>
 </html>

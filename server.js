@@ -16,4 +16,13 @@ app.post('/api/saveDescriptors', (req, res) => {
   });
 });
 
+// 保存打卡记录到 attendance.json
+app.post('/api/saveAttendance', (req, res) => {
+  const file = path.join(__dirname, 'attendance.json');
+  fs.writeFile(file, JSON.stringify(req.body, null, 2), (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ status: 'ok' });
+  });
+});
+
 app.listen(8000, () => console.log('Server running at http://localhost:8000'));
